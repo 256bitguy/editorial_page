@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-// Assuming you corrected the typo in the import path in your filesystem:
-// import QuestionForm from './components/QuestionsForm'; -> import QuestionForm from './components/QuestionForm';
+// Assuming the file path is actually correct on your system, even if it was typo'd previously
 import QuestionForm from './components/QuestionsForm'; 
 import './App.css'; 
 
@@ -18,7 +17,16 @@ function App() {
     const [isLoading, setIsLoading] = useState(false);
     const [submissionStatus, setSubmissionStatus] = useState(''); // 'success', 'error', 'pending'
 
-    const API_URL = 'https://penverse-app-backend-2.onrender.com/api/v1/editorials/';
+    // --- NEW MODAL STATE ---
+    const [showDailyModal, setShowDailyModal] = useState(false);
+    const [latestEditorialId, setLatestEditorialId] = useState(null);
+    const [dailyDate, setDailyDate] = useState(today);
+    const [isDailyPosting, setIsDailyPosting] = useState(false);
+
+    // API URLs
+    const EDITORIAL_API_URL = 'https://penverse-app-backend-2.onrender.com/api/v1/editorials';
+    const DAILY_API_URL = 'https://penverse-app-backend-2.onrender.com/api/v1/dailyeditorial';
+    // --- END NEW MODAL STATE ---
 
     const handleAddQuestion = () => {
         setQuestions([
@@ -38,7 +46,7 @@ function App() {
         setQuestions(questions.filter((_, i) => i !== index));
     };
 
-    // --- NEW COMBINED SUBMISSION FUNCTION ---
+    // --- MODIFIED SUBMISSION FUNCTION ---
     const handleSubmit = async (e) => {
         e.preventDefault();
         setSubmissionStatus('pending');
@@ -56,56 +64,136 @@ function App() {
             date,
         };
         
-        // 1. Update Preview (Local State)
         setJsonOutput(JSON.stringify(finalJson, null, 2));
 
-        // 2. Post Data (API Call)
         try {
-            const response = await fetch(API_URL, {
+            const response = await fetch(EDITORIAL_API_URL, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    // Add authorization headers if required by your backend
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(finalJson),
             });
 
             if (!response.ok) {
-                // Read the error message from the response body if available
                 const errorData = await response.json();
                 throw new Error(errorData.message || `HTTP error! Status: ${response.status}`);
             }
 
-            // Success
+            // SUCCESS STEP 1: Get the result and prepare for the next step
             const result = await response.json();
-            console.log('Submission Success:', result);
-            setSubmissionStatus('success');
-            // Optional: Clear form here or update UI
+            console.log('Editorial Submission Success:', result);
+            
+            // Assuming the successful response object (result) contains the _id property at the top level
+            if (result._id) {
+                setLatestEditorialId(result._id);
+                setShowDailyModal(true); // Open the modal
+                setSubmissionStatus('success');
+            } else {
+                 setSubmissionStatus('error');
+                 setJsonOutput('Submission Success, but missing _id for daily update.');
+            }
             
         } catch (error) {
-            // Failure
             console.error('Submission Error:', error.message);
             setSubmissionStatus('error');
-            setJsonOutput(`Submission failed: ${error.message}\n\n${JSON.stringify(finalJson, null, 2)}`); // Show JSON + error
+            setJsonOutput(`Submission failed: ${error.message}\n\n${JSON.stringify(finalJson, null, 2)}`);
         } finally {
             setIsLoading(false);
         }
     };
+
+    // --- NEW MODAL SUBMISSION HANDLER ---
+    const handleDailySubmit = async () => {
+        if (!latestEditorialId || !dailyDate) return;
+
+        setIsDailyPosting(true);
+        try {
+            const payload = { 
+                editorial: latestEditorialId, 
+                date: dailyDate 
+            };
+            
+            const response = await fetch(DAILY_API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || `Daily post failed! Status: ${response.status}`);
+            }
+
+            console.log('Daily Editorial Post Success!');
+            alert(`✅ Successfully added Editorial ID ${latestEditorialId} to Daily for ${dailyDate}!`);
+            setShowDailyModal(false); // Close modal on success
+
+        } catch (error) {
+            console.error('Daily Post Error:', error.message);
+            alert(`❌ Failed to post to Daily Editorial: ${error.message}`);
+        } finally {
+            setIsDailyPosting(false);
+        }
+    };
     // ----------------------------------------
+    
+    // --- Daily Editorial Modal Component (Rendered inline) ---
+    const DailyEditorialModal = () => {
+        if (!showDailyModal) return null;
+
+        return (
+            <div className="modal-backdrop">
+                <div className="modal-content">
+                    <h3>Add to Today's Daily Editorial?</h3>
+                    <p className="success-message-in-modal">✅ Editorial posted successfully! ID: <strong>{latestEditorialId}</strong></p>
+
+                    <div className="form-row">
+                        <label className="label-block">
+                            Select Date for Daily Post:
+                            <input
+                                type="date"
+                                value={dailyDate}
+                                onChange={(e) => setDailyDate(e.target.value)}
+                            />
+                        </label>
+                    </div>
+                    
+                    <div className="modal-actions">
+                        <button 
+                            type="button" 
+                            onClick={() => setShowDailyModal(false)} 
+                            className="modal-cancel-btn"
+                            disabled={isDailyPosting}
+                        >
+                            No, Close
+                        </button>
+                        <button 
+                            type="button" 
+                            onClick={handleDailySubmit} 
+                            className="modal-confirm-btn"
+                            disabled={isDailyPosting}
+                        >
+                            {isDailyPosting ? 'Posting...' : 'Confirm & Post to Daily'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+    // -----------------------------------------------------------
 
     return (
         <div className="app-container">
             <header>
                 <h1>JSON Content Generator</h1>
                 <p className={`status-message ${submissionStatus}`}>
-                    {submissionStatus === 'success' && '✅ Data successfully posted!'}
+                    {submissionStatus === 'success' && `✅ Editorial posted! ID: ${latestEditorialId} - Click to add to Daily.`}
                     {submissionStatus === 'error' && '❌ Submission failed. Check console for details.'}
                     {isLoading && '⏳ Submitting data...'}
                 </p>
             </header>
             
             <main className="content-layout">
-                {/* Wrap the form section in a <form> element for proper submission handling */}
+                {/* ... (Form section remains the same) ... */}
                 <section className="form-section">
                     <form onSubmit={handleSubmit}>
                         <h2>Content Details</h2>
@@ -177,6 +265,9 @@ function App() {
                     </pre>
                 </section>
             </main>
+
+            {/* Render the Modal */}
+            <DailyEditorialModal /> 
         </div>
     );
 }
