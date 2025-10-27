@@ -102,7 +102,7 @@ const QuestionForm = ({ index, question, onUpdate, onDelete }) => {
             </div>
             
             <button type="button" onClick={() => onDelete(index)} className="delete-question-btn">
-                Delete Question
+                Delete this Question
             </button>
         </div>
     );
