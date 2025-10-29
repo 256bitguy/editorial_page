@@ -108,7 +108,7 @@ function App() {
         setIsDailyPosting(true);
         try {
             const payload = { 
-                editorial: latestEditorialId, 
+                list: [latestEditorialId], 
                 date: dailyDate 
             };
             
